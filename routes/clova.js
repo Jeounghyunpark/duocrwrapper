@@ -105,7 +105,7 @@ router.post('/', function(req, res, next) {
             console.log( clova);
             return res.status(415).send("Unsupported Media Type or Not Acceptable ");
         }
-        var score_sum = 0.0;
+        var min_score = 1.0;
         var full_text = ''
         var du_resp = {
             responses: [
@@ -143,16 +143,16 @@ router.post('/', function(req, res, next) {
             desc += p.inferText;
             if( p.lineBreak)
                 desc += "\n";
-            score_sum += p.inferConfidence;
+            min_score =  Math.min( min_score, p.inferConfidence);
             if( rotation_check_count >= 0) {
-                if( p.boundingPoly.vertices[0].y == p.boundingPoly.vertices[1].y &&
-                    p.boundingPoly.vertices[1].x == p.boundingPoly.vertices[2].x && 
-                    p.boundingPoly.vertices[0].x > p.boundingPoly.vertices[1].x )
-                    skew[2]++;
+                if( p.boundingPoly.vertices[0].x == p.boundingPoly.vertices[1].x &&
+                    p.boundingPoly.vertices[1].y == p.boundingPoly.vertices[2].y && 
+                    p.boundingPoly.vertices[2].x > p.boundingPoly.vertices[3].x )
+                    skew[1]++;
                 else if ( p.boundingPoly.vertices[0].y == p.boundingPoly.vertices[1].y && 
                     p.boundingPoly.vertices[1].x == p.boundingPoly.vertices[2].x &&
                     p.boundingPoly.vertices[1].x < p.boundingPoly.vertices[0].x )
-                    skew[1]++;
+                    skew[2]++;
                 else if ( p.boundingPoly.vertices[0].x == p.boundingPoly.vertices[1].x && 
                     p.boundingPoly.vertices[1].y == p.boundingPoly.vertices[2].y && 
                     p.boundingPoly.vertices[2].x > p.boundingPoly.vertices[1].x )
@@ -163,17 +163,17 @@ router.post('/', function(req, res, next) {
             }
         })
         var max_idx = 0, max=0, idx=0;
-        for( idx =0; idx <= skew.length; idx++)
+        for( idx =0; idx < skew.length; idx++)
         {
             if( skew[idx] > max) {
                 max = skew[idx];
-                max_id = idx;
+                max_idx = idx;
             }
         }
         du_resp.responses[0].description = desc;
         du_resp.responses[0].angle =  rot_val[max_idx];
-        //평균 score 값을 계산 
-        du_resp.responses[0].score = score_sum / du_resp.responses[0].textAnnotations.length;
+        //가장 낮은 score 값을 사용 
+        du_resp.responses[0].score = min_score;
         //console.log( JSON.stringify(du_resp));
         res.send( du_resp);
     });
