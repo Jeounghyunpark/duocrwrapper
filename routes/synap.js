@@ -64,7 +64,6 @@ router.post('/', function(req, res, next) {
     const synap_boxes_type = process.env.SYNAP_BOXES_TYPE || "block";
     res.writeContinue();
     var hash = crypto.createHash('md5').update( req.body.requests[0].image.content).digest('hex');  
-    //let buff = new Buffer( req.body.requests[0].image.content, "base64");
     let buff = Buffer.from( req.body.requests[0].image.content, "base64");
     var filename = uuid.v4();
     fs.writeFileSync( __dirname + "/" + filename+".jpg", buff);
@@ -87,23 +86,29 @@ router.post('/', function(req, res, next) {
 
 
     request.post( options, function(err, resp) {
-        fs.unlink( __dirname + '/' + filename + '.jpg', (err) => {
-            if( err)
+        
+        fs.unlink( __dirname + '/' + filename + '.jpg', (err2) => {
+            if( err2)
                 console.error('error on file deletion ');
         });
+        
         if( err) {
             console.log(err);
-            return res.status(500).send("Unknow errors");
+            return res.status(500).send("Unknown error");
         }
-        synap = JSON.parse(resp.body);
         if( resp.statusCode == 401 || resp.statusCode == 402) 
         {
             return res.status(401).send("Unauthorized");
         }
-        if( resp.statusCode != 200) {
-            console.log( synap);
+        else if( resp.statusCode == 500 || resp.statusCode == 502 || resp.statusCode == 503)
+        {
+            return res.status(500).send("Internal Server Error");
+        }
+        else if( resp.statusCode != 200) {
+            console.log( resp.body);
             return res.status(415).send("Unsupported Media Type or Not Acceptable ");
         }
+        synap = JSON.parse(resp.body);
         var min_score = 1.0;
         var du_resp = {
             responses: [
@@ -145,19 +150,56 @@ router.post('/', function(req, res, next) {
         }
 
         boxes.forEach( p => {
-            du_resp.responses[0].textAnnotations.push ({
-                description: p[5],
-                score: p[4],
-                type: 'text',
-                boundingPoly: {
-                    vertices: [
-                        {x: p[0][0], y: p[0][1]},
-                        {x: p[1][0], y: p[1][1]},
-                        {x: p[2][0], y: p[2][1]},
-                        {x: p[3][0], y: p[3][1]}
-                    ]
-                }
-            });
+            //word 중에 : 에 있다면 
+            let idxcol = p[5].indexOf(":");
+            if( idxcol  > 0 && p[5].length-1 > idxcol) {
+                let wlen = p[5].length;
+                let llen = ((idxcol+1) * Math.abs( p[0][0]-p[1][0]))/wlen; 
+                //console.log(`org: ${p[5]} >>>  ${p[5].substring(0, idxcol+1)}  <->  ${p[5].substring(idxcol+1)}`);
+                //console.log(`left len: ${llen} ,right len:  ${Math.abs(p[1][0]-p[0][0])-llen}`);
+                // : 기준 left (:포함)
+                du_resp.responses[0].textAnnotations.push ({
+                    description: p[5].substring(0, idxcol+1),
+                    score: p[4],
+                    type: 'text',
+                    boundingPoly: {
+                        vertices: [
+                            {x: p[0][0], y: p[0][1]},
+                            {x: p[0][0] + llen-2, y: p[1][1]},
+                            {x: p[0][0] + llen-2, y: p[2][1]},
+                            {x: p[3][0], y: p[3][1]}
+                        ]
+                    }
+                });
+                // : 기준 right (:제외)
+                du_resp.responses[0].textAnnotations.push ({
+                    description: p[5].substring(idxcol+1),
+                    score: p[4],
+                    type: 'text',
+                    boundingPoly: {
+                        vertices: [
+                            {x: p[0][0] + llen + 2, y: p[0][1]},
+                            {x: p[1][0], y: p[1][1]},
+                            {x: p[2][0], y: p[2][1]},
+                            {x: p[3][0] + llen + 2, y: p[3][1]}
+                        ]
+                    }
+                }); 
+            } else {
+                du_resp.responses[0].textAnnotations.push ({
+                    description: p[5],
+                    score: p[4],
+                    type: 'text',
+                    boundingPoly: {
+                        vertices: [
+                            {x: p[0][0], y: p[0][1]},
+                            {x: p[1][0], y: p[1][1]},
+                            {x: p[2][0], y: p[2][1]},
+                            {x: p[3][0], y: p[3][1]}
+                        ]
+                    }
+                });
+             }
             min_score =  Math.min( min_score, p[4]);
         })
         //가장 낮은 score 값을 계산 

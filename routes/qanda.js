@@ -90,28 +90,29 @@ router.post('/', function(req, res, next) {
         formData: formdata
     }
     // Digitize Document 에서 호출 
-    //console.log( req.body.requests[0].imageContext); { languageHints: [ 'auto' ] }
-    //console.log( req.body.requests[0].features); [ { type: 'TextDetection' } ]
-    //console.log( formdata.context, formdata.hints)
     request.post( options, function(err, resp) {
-        fs.unlink( __dirname + '/' + filename + '.img', (err) => {
-            if( err)
+        fs.unlink( __dirname + '/' + filename + '.img', (err2) => {
+            if( err2)
                 console.error('error on file deletion ');
         });
         if( err) {
             console.log(err);
-            return res.status(500).send("Unknow errors");
+            return res.status(500).send("Unknown error");
         }
         //console.log( resp.body)
-        qanda = JSON.parse(resp.body);
         if( resp.statusCode == 401 || resp.statusCode == 402) 
         {
             return res.status(401).send("Unauthorized");
         }
-        if( resp.statusCode != 200) {
-            console.log( qanda);
+        else if( resp.statusCode == 500 || resp.statusCode == 502 || resp.statusCode == 503)
+        {
+            return res.status(500).send("Internal Server Error");
+        }
+        else if( resp.statusCode != 200) {
+            console.log( resp.body);
             return res.status(415).send("Unsupported Media Type or Not Acceptable ");
         }
+        qanda = JSON.parse(resp.body);
         var score_sum = 0.0;
         var du_resp = {
             responses: [
@@ -157,8 +158,6 @@ router.post('/', function(req, res, next) {
         //du_resp.responses[0].description = qanda.text;
         //평균 score 값을 계산 
         du_resp.responses[0].score = score_sum / du_resp.responses[0].textAnnotations.length;
-        //console.log( JSON.stringify(du_resp));
-        //fs.writeFileSync(__dirname + '/' + filename+".json", JSON.stringify(du_resp));
         res.send( du_resp);
 
     });
